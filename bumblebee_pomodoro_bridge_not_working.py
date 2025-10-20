@@ -9,32 +9,43 @@ import signal
 STATE_FILE = os.path.join(tempfile.gettempdir(), "bumblebee_pomodoro_pid")
 
 def run_bumblebee():
-    # Start bumblebee-status for pomodoro in JSON mode
     proc = subprocess.Popen(
-        ["/home/mmorlot/dev-perso/bumblebee-status/bumblebee-status", "-m", "pomodoro", "-t", "gruvbox-powerline", "-f", "json"],
-        stdin=subprocess.PIPE,
+        ["/home/mmorlot/dev-perso/bumblebee-status/bumblebee-status",
+         "-m", "pomodoro",
+         "-t", "gruvbox-powerline",
+         "-f", "json"],
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
     )
 
-    # Save the PID for later click forwarding
-    with open(STATE_FILE, "w") as f:
-        f.write(str(proc.pid))
-
     try:
         for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
             try:
                 data = json.loads(line.strip())
-                if isinstance(data, list) and len(data) > 0:
-                    module = data[0]
-                    text = module.get("full_text", "")
-                    print(text, flush=True)
-            except Exception:
-                continue
+                if isinstance(data, list):
+                    # find first non-decorator block
+                    for module in data:
+                        if not module.get("_decorator", False):
+                            text = module.get("full_text", "")
+                            if text:
+                                print(text, flush=True)
+                            break
+            except json.JSONDecodeError:
+                # fallback
+                line = line.strip()
+                if line:
+                    print(line, flush=True)
+
+                        except json.JSONDecodeError:
+                            # fallback: print line as-is
+                            print(line, flush=True)
     except KeyboardInterrupt:
         pass
     finally:
-        os.remove(STATE_FILE)
         proc.terminate()
 
 def send_click(button):

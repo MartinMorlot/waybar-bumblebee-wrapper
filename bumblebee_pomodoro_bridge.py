@@ -9,39 +9,53 @@ import signal
 STATE_FILE = os.path.join(tempfile.gettempdir(), "bumblebee_pomodoro_pid")
 
 def run_bumblebee():
+    """Run bumblebee-status pomodoro module and continuously stream updates for Waybar."""
     proc = subprocess.Popen(
         ["/home/mmorlot/dev-perso/bumblebee-status/bumblebee-status",
          "-m", "pomodoro",
          "-t", "gruvbox-powerline",
          "-f", "json"],
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
+    # Save PID for click forwarding
+    with open(STATE_FILE, "w") as f:
+        f.write(str(proc.pid))
 
     try:
         for line in proc.stdout:
             line = line.strip()
             if not line:
                 continue
+
             try:
                 data = json.loads(line)
                 if isinstance(data, list):
-                    # find first non-decorator block
+                    # Find first non-decorator block
+                    text_to_print = None
                     for module in data:
                         if not module.get("_decorator", False):
                             text = module.get("full_text", "")
                             if text:
-                                print(text, flush=True)
-                            break
+                                text_to_print = text
+                                break
+                    if text_to_print:
+                        print(text_to_print, flush=True)
             except json.JSONDecodeError:
-                # fallback: print line as-is
+                # Fallback: print line as-is if JSON parsing fails
                 print(line, flush=True)
+
     except KeyboardInterrupt:
         pass
     finally:
+        # Clean up PID file and terminate bumblebee-status process
+        if os.path.exists(STATE_FILE):
+            os.remove(STATE_FILE)
         proc.terminate()
-
+        
 def send_click(button):
     """Send a click event to the running bumblebee-status process."""
     if not os.path.exists(STATE_FILE):
